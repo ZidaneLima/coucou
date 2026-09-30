@@ -6,12 +6,16 @@ mod hooks;
 mod integrations;
 mod island;
 mod log;
+mod opencode;
+mod opencode_chat;
 mod pipe;
 mod platform;
 mod secrets;
 mod settings;
 mod tray;
+mod win_user;
 
+use std::os::windows::process::CommandExt;
 use std::process::Command;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
@@ -24,8 +28,12 @@ use claude::{Chat, ChatContext, ChatReply};
 use files::DroppedFile;
 use hooks::{HookPreview, HookStatus};
 use island::{PollGate, ScreenInfo};
+use opencode::{OpencodePreview, OpencodeStatus};
 use pipe::Pending;
 use settings::Settings;
+
+/// Keeps spawned helpers from flashing a console window.
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 pub struct Shared {
     pub settings: Mutex<Settings>,
@@ -39,9 +47,6 @@ pub struct BootInfo {
     screen: ScreenInfo,
     version: String,
     hook_path: String,
-    /// False where the OS has no global cursor (Wayland): the page then reports
-    /// the cursor from its own mouse events.
-    cursor_poll: bool,
 }
 
 #[tauri::command]
@@ -55,7 +60,6 @@ fn boot(app: AppHandle, shared: State<Shared>) -> BootInfo {
         screen,
         version: env!("CARGO_PKG_VERSION").to_string(),
         hook_path: settings::hook_exe_path().to_string_lossy().to_string(),
-        cursor_poll: platform::CURSOR_POLL,
     }
 }
 
@@ -94,24 +98,21 @@ fn set_collapsed(app: AppHandle, shared: State<Shared>, collapsed: bool) {
     shared.gate.collapsed.store(collapsed, Ordering::Relaxed);
     island::apply_geometry(&app, &pref, collapsed);
     // The wake strip must always take the mouse, and a resize invalidates the flag.
-    island::refresh_click_through(&app, &shared.gate);
+    island::set_ignore_cursor(&app, false);
+    shared.gate.forget_ignore_state();
     shared.gate.set_active(!collapsed);
 }
 
 /// The front end pushes the island shape; Rust decides click-through from it.
 #[tauri::command]
-fn set_island_rect(app: AppHandle, shared: State<Shared>, x: f64, y: f64, width: f64, height: f64) {
+fn set_island_rect(shared: State<Shared>, x: f64, y: f64, width: f64, height: f64) {
     shared.gate.set_rect(island::IslandRect { x, y, w: width, h: height });
-    // Without the cursor poll the input region is the click-through: it follows the island.
-    if !platform::CURSOR_POLL {
-        island::refresh_click_through(&app, &shared.gate);
-    }
 }
 
 #[tauri::command]
 fn focus_window(app: AppHandle, focused: bool) {
     let Some(win) = island::window(&app) else { return };
-    platform::set_activating(&win, focused);
+    island::set_activating(&win, focused);
     if focused {
         let _ = win.set_focus();
     }
@@ -126,33 +127,14 @@ fn reposition(app: AppHandle, shared: State<Shared>) {
 
 #[tauri::command]
 fn open_url(url: String) {
-    if !(url.starts_with("http://") || url.starts_with("https://")) {
-        return;
-    }
     platform::open_url(&url);
 }
 
 /// "Open terminal" opens the working folder in VS Code when `code` is on PATH,
-/// and falls back to the file manager otherwise.
+/// and falls back to the platform file manager otherwise.
 #[tauri::command]
 fn open_in_vscode(path: Option<String>) -> bool {
-    // No shell anywhere near this. The path is a project folder chosen by
-    // whoever is using Claude Code, and a shell would happily read `&`, `^`, `%`
-    // or `$` in a folder name as syntax. Finding the launcher ourselves and
-    // handing the path over as a separate argument keeps it a path.
-    if let Some(code) = platform::find_on_path("code") {
-        let mut cmd = Command::new(code);
-        if let Some(p) = path.as_deref().filter(|p| !p.is_empty()) {
-            cmd.arg(p);
-        }
-        if platform::no_console(&mut cmd).spawn().is_ok() {
-            return true;
-        }
-    }
-    if let Some(p) = path.as_deref().filter(|p| !p.is_empty()) {
-        platform::reveal_folder(p);
-    }
-    false
+    platform::open_in_editor(path.as_deref())
 }
 
 #[tauri::command]
@@ -201,11 +183,29 @@ fn hooks_apply(
     Ok(backup)
 }
 
+// ── opencode plugin ─────────────────────────────────────────────────────────
+
+#[tauri::command]
+fn opencode_status() -> OpencodeStatus {
+    opencode::status()
+}
+
+/// Returns the diff the user has to look at before anything is written.
+#[tauri::command]
+fn opencode_preview(install: bool) -> Result<OpencodePreview, String> {
+    opencode::preview(install)
+}
+
+/// Only ever called from an explicit click in the settings window.
+#[tauri::command]
+fn opencode_apply(install: bool, fingerprint: String) -> Result<String, String> {
+    opencode::write(install, &fingerprint)
+}
+
 #[tauri::command]
 fn approval_decision(app: AppHandle, request_id: String, decision: String) {
     pipe::answer(&app, &request_id, &decision);
 }
-
 /// The island has the card on screen, so the long wait for a human may begin.
 /// Until this arrives the relay only waits a few hundred milliseconds, which is
 /// what stops a paused or unresponsive island from freezing Claude Code.
@@ -224,20 +224,47 @@ fn approval_decline(app: AppHandle, request_id: String) {
 // ── Chat, files and secrets ───────────────────────────────────────────────────
 
 /// One chat turn. The API key and any file bytes stay on the Rust side.
+/// Routes to the user's opencode when Settings → Chat says so.
 #[tauri::command]
 async fn chat_send(
     shared: State<'_, Shared>,
     chat: State<'_, Chat>,
+    ochat: State<'_, opencode_chat::OpencodeChat>,
     query: String,
     context: Option<ChatContext>,
 ) -> Result<ChatReply, String> {
-    let model = shared.settings.lock().unwrap().model.clone();
-    claude::send(&chat, &model, query, context).await
+    let (provider, model, bin, omodel) = {
+        let s = shared.settings.lock().unwrap();
+        (
+            s.chat_provider.clone(),
+            s.model.clone(),
+            s.opencode_bin.clone(),
+            s.opencode_model.clone(),
+        )
+    };
+    if provider == "opencode" {
+        opencode_chat::send(&ochat, &bin, &omodel, query, context).await
+    } else {
+        claude::send(&chat, &model, query, context).await
+    }
 }
 
 #[tauri::command]
-fn chat_reset(chat: State<Chat>) {
+fn chat_reset(chat: State<Chat>, ochat: State<opencode_chat::OpencodeChat>) {
     chat.reset();
+    ochat.reset();
+}
+
+/// What the Settings → Chat section shows: resolved binary, key presence.
+#[tauri::command]
+fn chat_status(shared: State<Shared>) -> opencode_chat::ChatStatus {
+    let s = shared.settings.lock().unwrap();
+    opencode_chat::ChatStatus {
+        bin_configured: s.opencode_bin.clone(),
+        bin_resolved: opencode_chat::resolve_bin(&s.opencode_bin)
+            .map(|p| p.to_string_lossy().to_string()),
+        claude_key_present: secrets::present("anthropic-api-key"),
+    }
 }
 
 /// Copies a dropped file into the inbox and reports its name back.
@@ -349,7 +376,6 @@ fn open_settings_window(app: AppHandle) {
 }
 
 pub fn run() {
-    platform::prepare_environment();
     let loaded = settings::load();
     let gate = Arc::new(PollGate::new());
 
@@ -364,6 +390,7 @@ pub fn run() {
         })
         .manage(Pending::default())
         .manage(Chat::default())
+        .manage(opencode_chat::OpencodeChat::default())
         .invoke_handler(tauri::generate_handler![
             boot,
             save_settings,
@@ -377,12 +404,16 @@ pub fn run() {
             hooks_status,
             hooks_preview,
             hooks_apply,
+            opencode_status,
+            opencode_preview,
+            opencode_apply,
             approval_decision,
             approval_ack,
             approval_decline,
             log_line,
             chat_send,
             chat_reset,
+            chat_status,
             ingest_file,
             secret_present,
             secret_set,
@@ -399,21 +430,17 @@ pub fn run() {
             create_settings_window(&handle);
 
             if let Some(win) = island::window(&handle) {
-                platform::make_non_activating(&win);
+                island::make_non_activating(&win);
                 island::apply_geometry(&handle, &loaded.screen, false);
                 let _ = win.show();
             }
             gate.collapsed.store(false, Ordering::Relaxed);
-            // Nothing drawn yet, so nothing takes the mouse until the page
-            // reports the island's shape.
-            if !platform::CURSOR_POLL {
-                island::refresh_click_through(&handle, &gate);
-            }
             gate.set_active(true);
             island::spawn_cursor_poll(handle.clone(), gate.clone());
 
             log::line(format!("--- Coucou {} started ---", env!("CARGO_PKG_VERSION")));
             hooks::ensure_hook_exe(&handle);
+            opencode::ensure_plugin();
             pipe::start(handle.clone());
             integrations::start(handle.clone());
             Ok(())
