@@ -72,12 +72,45 @@ pub fn no_console(cmd: &mut Command) -> &mut Command {
 }
 
 pub fn open_url(url: &str) {
+    // Anything but http(s) is refused here: the command takes the string from
+    // the page, and a file:// or ms-msdt: URL would be handed to a handler the
+    // user never chose.
+    if !(url.starts_with("http://") || url.starts_with("https://")) {
+        return;
+    }
     let _ = no_console(Command::new("rundll32.exe").args(["url.dll,FileProtocolHandler", url]))
         .spawn();
 }
 
 pub fn reveal_folder(path: &str) {
     let _ = Command::new("explorer").arg(path).spawn();
+}
+
+/// Opens the working folder of a session in VS Code when `code` is on PATH, and
+/// falls back to Explorer otherwise.
+///
+/// No `cmd /C` anywhere near this. The path is a project folder chosen by
+/// whoever is using Claude Code, and cmd would happily read `&`, `^` and `%` in
+/// a folder name as syntax. Finding the launcher ourselves and handing the path
+/// over as a separate argument keeps it a path.
+pub fn open_in_editor(path: Option<&str>) -> bool {
+    let target = path.filter(|p| !p.is_empty());
+    if let Some(code) = find_on_path("code") {
+        let mut cmd = Command::new(code);
+        if let Some(p) = target {
+            cmd.arg(p);
+        }
+        if no_console(&mut cmd).spawn().is_ok() {
+            return true;
+        }
+    }
+    match target {
+        Some(p) => {
+            reveal_folder(p);
+            true
+        }
+        None => false,
+    }
 }
 
 /// Our own `where`: walks %PATH% against %PATHEXT%, no shell involved.
@@ -142,8 +175,15 @@ pub fn current_user_sid() -> Option<String> {
 
 // ── Cursor ────────────────────────────────────────────────────────────────────
 
+/// Nothing to open: the 60 Hz poll reads the cursor and flips click-through
+/// from it. Kept as a function so both platforms answer the same question the
+/// same way.
+pub fn start_cursor_feed() {}
+
 /// The 60 Hz poll reads the cursor and flips click-through from it.
-pub const CURSOR_POLL: bool = true;
+pub fn cursor_poll() -> bool {
+    true
+}
 
 /// Cursor position in physical screen pixels.
 pub fn cursor_physical() -> Option<(f64, f64)> {

@@ -215,6 +215,12 @@ pub fn spawn_cursor_poll(app: AppHandle, gate: Arc<PollGate>) {
                     }
                 }
 
+                // Nothing to read: the page reports the pointer from its own mouse
+                // events and the input region decides click-through.
+                if !platform::cursor_poll() {
+                    continue;
+                }
+
                 let Some(win) = window(&app) else { continue };
                 let Ok(origin) = win.outer_position() else { continue };
                 let scale = win.scale_factor().unwrap_or(1.0);
@@ -280,7 +286,7 @@ pub fn spawn_cursor_poll(app: AppHandle, gate: Arc<PollGate>) {
 /// tick decides from the cursor. Without it (Linux) the input region is set to
 /// the island itself, or to the whole wake strip while collapsed.
 pub fn refresh_click_through(app: &AppHandle, gate: &PollGate) {
-    if platform::CURSOR_POLL {
+    if platform::cursor_poll() {
         set_ignore_cursor(app, false);
         gate.forget_ignore_state();
         return;

@@ -74,7 +74,24 @@ There is no notch on a PC, so the island slides out of the top edge of the scree
 instead of hiding inside one. See [`windows/README.md`](windows/README.md) for the
 rest of the differences.
 
-### Linux
+### Arch Linux / Omarchy
+
+```bash
+sudo pacman -S --needed base-devel cargo nodejs npm pkgconf patchelf \
+  webkit2gtk-4.1 gtk3 gtk-layer-shell libappindicator-gtk3 librsvg \
+  openssl dbus gst-plugins-good pipewire
+
+git clone https://github.com/Louis-CFM/coucou.git
+cd coucou
+./packaging/arch/install.sh
+```
+
+Builds and installs into `~/.local`, no root, nothing system-wide. See
+[`windows/README.md#linux`](windows/README.md#linux) for the layer-shell and
+cursor details, and [`packaging/arch/PKGBUILD`](packaging/arch/PKGBUILD) for the
+`makepkg` version.
+
+### Other Linux distributions
 
 Grab a package from [Releases](https://github.com/Louis-CFM/coucou/releases):
 
@@ -84,7 +101,7 @@ Grab a package from [Releases](https://github.com/Louis-CFM/coucou/releases):
 
 The island sits on the top edge on compositors with layer-shell — COSMIC, KDE
 Plasma, Hyprland, Sway and other wlroots compositors. GNOME has no layer-shell,
-so there it opens as a regular window. See [`windows/README.md`](windows/README.md#linux).
+so there it opens as a regular window.
 
 ### Build from source
 
@@ -126,16 +143,18 @@ Click the Coucou icon in the menu bar (macOS) or in the system tray (Windows, Li
 | What | Why | Where the key goes |
 |---|---|---|
 | **Claude Code hooks** | live sessions and approvals | **Install hooks** — Coucou backs up `~/.claude/settings.json`, merges its hooks and shows you the diff before writing anything |
+| **opencode plugin** | opencode sessions and approvals | **Install plugin** — one file copied to `~/.config/opencode/plugins/coucou.js`, previewed first |
 | **Anthropic API key** | chat and questions about files | Keychain / Windows Credential Manager / Secret Service |
 | Stripe, n8n, GitHub, Vercel, Resend, Notion, Cal.com | the integration pills | Keychain / Windows Credential Manager / Secret Service, all optional |
 
-If Coucou isn't running, the hook exits immediately: **Claude Code is never blocked.**
+If Coucou isn't running, the relay exits immediately: **Claude Code and opencode
+are never blocked.**
 
 ## Things to try
 
 | Do this | Mochi does that |
 |---|---|
-| Hover the notch (top edge on Windows) | peeks out and says hi 👋 |
+| Hover the notch (top edge on Windows and Linux) | peeks out and says hi 👋 |
 | Click it | opens |
 | Hover Mochi | blinks, eyes grow |
 | Click Mochi | squish + annoyed |
@@ -158,15 +177,20 @@ The macOS app is native Swift 6 / SwiftUI / AppKit with **zero third-party depen
 **Windows**
 
 - A [Tauri 2](https://tauri.app) app (Rust + TypeScript): the island is a transparent, always-on-top window that never steals focus, Mochi is drawn in Canvas 2D with the same shapes, timings and sounds as on the Mac.
-- Claude Code hooks go through a tiny `coucou-hook.exe` and a named pipe; keys live in Windows Credential Manager.
+- Claude Code hooks and the opencode plugin go through a tiny `coucou-hook.exe` and a named pipe; keys live in Windows Credential Manager.
 - Details and differences in [`windows/README.md`](windows/README.md).
 
 **Linux**
 
 - The same Tauri app as Windows. On Wayland the island is a gtk-layer-shell
-  overlay anchored to the top edge, and click-through is its input region.
+  surface anchored to the top edge, taking no exclusive space, and click-through
+  is its input region. It sits on the **top** layer rather than the overlay one,
+  because wlroots only hands out the keyboard there.
 - Claude Code hooks go through the same `coucou-hook`, over a Unix socket in
-  `$XDG_RUNTIME_DIR`; keys live in the Secret Service.
+  `$XDG_RUNTIME_DIR`; the opencode plugin uses the same relay. Keys live in the
+  Secret Service.
+- On Hyprland the compositor's own event socket supplies the cursor, so Mochi's
+  eyes follow the pointer across the whole screen instead of only over the island.
 
 ## Contributing
 

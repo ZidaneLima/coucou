@@ -2,13 +2,14 @@
 
 <img src="src-tauri/icons/128x128.png" width="96" alt="Coucou icon">
 
-# Coucou for Windows
+# Coucou for Windows and Linux
 
 **Mochi doesn't get a notch on a PC — so it lives at the top of your screen instead.**
 
 Approve Claude Code permissions, watch your session work, drop a file, chat with Claude, keep an eye on your services — without leaving what you're doing.
 
 ![Windows 10/11](https://img.shields.io/badge/Windows-10%2F11-0078D4?logo=windows)
+![Linux](https://img.shields.io/badge/Linux-AppImage%20%7C%20deb%20%7C%20rpm%20%7C%20Arch-FCC624?logo=linux&logoColor=black)
 ![Tauri 2](https://img.shields.io/badge/Tauri-2-FFC131?logo=tauri&logoColor=black)
 ![Rust](https://img.shields.io/badge/Rust-backend-000?logo=rust)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
@@ -61,7 +62,8 @@ that will be taken, and nothing is written until you click. Your own hooks are
 never touched, and uninstalling removes only Coucou's entries.
 
 The relay is a tiny executable, `coucou-hook.exe`, copied to
-`%LOCALAPPDATA%\Coucou\bin\` at launch. It is given 300 ms to reach Coucou and
+`%LOCALAPPDATA%\Coucou\bin\` at launch (`~/.local/share/coucou/bin/coucou-hook`
+on Linux). It is given 300 ms to reach Coucou and
 exits cleanly if the app is closed, slow or crashed — **a Claude Code session is
 never blocked or slowed down by Coucou.** If nobody answers a permission request
 in time, Coucou stays quiet and Claude Code asks in the terminal as usual.
@@ -71,18 +73,19 @@ It works from any terminal — Windows Terminal, PowerShell, VS Code, Git Bash.
 ## opencode
 
 Open **Settings… → opencode → Install plugin…**. This copies `coucou.js` (in
-`opencode-plugin/` next to the source) to
-`%USERPROFILE%\.config\opencode\plugins\coucou.js` — opencode auto-loads
-global plugins, so no `opencode.json` edit is needed. You get a preview of
-what will change, a dated backup of any previous copy, and nothing is written
-until you click. Uninstall removes only Coucou's file.
+`opencode-plugin/` next to the source) to `~/.config/opencode/plugins/coucou.js`
+(`%USERPROFILE%\.config\opencode\plugins\coucou.js` on Windows) — opencode
+auto-loads global plugins, so no `opencode.json` edit is needed. You get a
+preview of what will change, a dated backup of any previous copy, and nothing is
+written until you click. Uninstall removes only Coucou's file.
 
-The plugin forwards session, tool and permission events through the same
-`coucou-hook.exe` relay and named pipe Claude Code uses, so the island shows
-opencode sessions in their own pill with the same **Deny / Allow** approval
-card. The same guarantee holds: **an opencode session is never blocked by
-Coucou** — if nobody answers in time, opencode asks in the TUI as usual.
-Restart opencode after installing so it picks the plugin up.
+The plugin forwards session, tool and permission events through the same relay
+Claude Code uses — `coucou-hook.exe` and a named pipe on Windows, `coucou-hook`
+and `$XDG_RUNTIME_DIR/coucou.sock` on Linux — so the island shows opencode
+sessions in their own pill with the same **Deny / Allow** approval card. The
+same guarantee holds: **an opencode session is never blocked by Coucou** — if
+nobody answers in time, opencode asks in the TUI as usual. Restart opencode
+after installing so it picks the plugin up.
 
 ## Chat and keys
 
@@ -142,16 +145,17 @@ windows/
     island/            state machine, hooks, integrations
     views/             every island view
     settings/          the settings window
-  src-tauri/           Rust backend: window, named pipe, Claude API, pollers
-  hook/                coucou-hook.exe, the Claude Code relay
-  opencode-plugin/     coucou.js, the opencode plugin (same relay, same pipe)
+  src-tauri/           Rust backend: window, relay socket, Claude API, pollers
+  hook/                coucou-hook, the Claude Code and opencode relay
+  opencode-plugin/     coucou.js, the opencode plugin (same relay, same socket)
   scripts/             icon generator
 ```
 
 ### Log
 
-`%LOCALAPPDATA%\Coucou\coucou.log` — hook events, permission decisions, poller
-problems. It stays on your machine.
+%LOCALAPPDATA%\Coucou\coucou.log` on Windows,
+`~/.local/share/coucou/coucou.log` on Linux — hook events, permission decisions,
+poller problems. It stays on your machine.
 
 ## What's different from the Mac version
 
@@ -168,31 +172,84 @@ problems. It stays on your machine.
 
 The same app builds for Linux: everything that differs lives in
 `src-tauri/src/platform/`, and the relay's transport in `hook/src/unix.rs`.
+This fork targets **Arch Linux and Omarchy on Hyprland**, where the island is a
+layer-shell panel on the top edge.
+
+### Install on Arch
 
 ```bash
-sudo apt install libwebkit2gtk-4.1-dev libgtk-layer-shell-dev \
-  libayatana-appindicator3-dev librsvg2-dev libssl-dev patchelf
+sudo pacman -S --needed base-devel cargo nodejs npm pkgconf patchelf \
+  webkit2gtk-4.1 gtk3 gtk-layer-shell libappindicator-gtk3 librsvg \
+  openssl dbus
+sudo pacman -S --needed gst-plugins-good pipewire   # Mochi's 28 sounds
+
+./packaging/arch/install.sh
+```
+
+No root, nothing outside `~/.local`, and the script asks whether Coucou should
+start at login. `./packaging/arch/install.sh --uninstall` removes exactly what
+it installed and touches nothing else — `~/.claude/settings.json` is undone from
+the settings window, never by a script.
+
+`packaging/arch/PKGBUILD` is the same build as an Arch package, for
+`makepkg -si` or for an AUR submission. It wants the release tarball, so until
+this fork publishes one, use the script.
+
+### What changes on Linux
+
+- **The island** is a gtk-layer-shell surface anchored to the top edge, taking
+  **no exclusive space** — no window is ever pushed down for it. GNOME has no
+  layer-shell, so there the island is an ordinary always-on-top window.
+- **The layer is `top`**, not `overlay`, because wlroots (Hyprland, Sway) only
+  hands out keyboard interactivity on the top layer: an overlay island can never
+  be typed into, so the chat box and the approvals would be dead.
+- **Keys** live in the Secret Service (GNOME Keyring, KWallet), never on disk.
+- **Claude Code hooks** go through `~/.local/share/coucou/bin/coucou-hook` and a
+  Unix socket at `$XDG_RUNTIME_DIR/coucou.sock`. Both ends check that the other
+  runs as the same user.
+- **opencode** uses the same relay, the same socket and the same never-block rule.
+  Its plugin lands in `$XDG_CONFIG_HOME/opencode/plugins/coucou.js`, and the CLI
+  is found on `PATH` or in the usual npm/bun/pnpm/volta homes.
+- **Files**: preferences in `~/.config/coucou/`, the log at
+  `~/.local/share/coucou/coucou.log`.
+- **Mochi's eyes follow the pointer across the whole screen** on Hyprland, which
+  streams `cursorpos` on its event socket; everywhere else Wayland gives no app
+  the cursor outside its own surface, so the eyes only follow it over the island.
+- **Click-through** is the window's input region, kept equal to the island shape,
+  so the compositor sends every other click to whatever is underneath.
+- Not in this version either: sending a file by email, dragging Mochi onto a
+  window, and jumping to a specific terminal window — "Open terminal" opens the
+  folder in `code`, `$COUCOU_EDITOR`, `$VISUAL`, `$EDITOR`, or the file manager.
+
+### Environment variables
+
+| Variable | What it does |
+|---|---|
+| `COUCOU_TOP_MARGIN` | Logical-pixel gap between the screen's top edge and the island. Set it to your bar's height when the bar is drawn over Mochi. |
+| `COUCOU_LAYER` | `top` (default), `overlay`, `bottom` or `background`. `overlay` puts the island above everything on compositors that allow the keyboard there (COSMIC, KDE Plasma). |
+| `COUCOU_LAYER_SHELL` | `0` turns the island into a plain always-on-top window, for a compositor where layer-shell misbehaves. |
+| `COUCOU_CURSOR_POLL` | `0` ignores the Hyprland cursor feed and falls back to following the pointer only over the island. |
+
+Layer surfaces keep their mapping order inside a layer, so on Hyprland the island
+sits above Waybar only while Waybar is not remapped. If a bar reload puts itself
+in front, `COUCOU_TOP_MARGIN` is the fix.
+
+### Build and test
+
+```bash
+cd windows
 npm install
 npm run tauri dev      # live-reloading development build
 npm run pack           # AppImage, .deb and .rpm in windows/release/
 ```
 
-What changes on Linux:
+The Arch workflow (`.github/workflows/arch.yml`) compiles and tests this in an
+Arch container on every push — `platform/linux.rs` and `hook/src/unix.rs` are
+`cfg`'d out on every other runner, so nothing else ever builds them.
 
-- **The island** is a gtk-layer-shell overlay anchored to the top edge, over any
-  top panel, on compositors that support it: COSMIC, KDE Plasma, Hyprland, Sway
-  and other wlroots compositors. GNOME has no layer-shell, so there the island
-  is a regular window. `COUCOU_LAYER_SHELL=0` forces that mode anywhere.
-- **Click-through** is the window's input region, kept equal to the island
-  shape, so the compositor sends every other click to what is underneath.
-- **Mochi's eyes** follow the pointer only while it is over the island: Wayland
-  gives no app the cursor position anywhere else.
-- **Claude Code hooks** go through `~/.local/share/coucou/bin/coucou-hook` and a
-  Unix socket at `$XDG_RUNTIME_DIR/coucou.sock`. Both ends check that the other
-  runs as the same user.
-- **Keys** live in the Secret Service (GNOME Keyring, KWallet).
-- **Files**: preferences in `~/.config/coucou/`, the log at
-  `~/.local/share/coucou/coucou.log`.
-- What the Windows build leaves out, this one does too: sending a file by
-  email, dragging Mochi onto a window, and jumping to a specific terminal
-  window — "Open terminal" opens the folder in VS Code.
+Dependencies are the Debian names in `linux.yml` on Ubuntu:
+
+```bash
+sudo apt install libwebkit2gtk-4.1-dev libgtk-layer-shell-dev \
+  libayatana-appindicator3-dev librsvg2-dev libssl-dev patchelf
+```

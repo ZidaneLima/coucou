@@ -31,3 +31,14 @@ pub fn home_dir() -> PathBuf {
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("."))
 }
+
+/// `~/.config`, or `$XDG_CONFIG_HOME` when it is set and absolute.
+///
+/// opencode keeps its global configuration under `~/.config/opencode` on every
+/// OS, so this is not Linux-only despite the name.
+pub fn xdg_config_home() -> PathBuf {
+    std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute())
+        .unwrap_or_else(|| home_dir().join(".config"))
+}

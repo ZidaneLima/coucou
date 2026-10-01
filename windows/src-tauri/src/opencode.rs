@@ -5,7 +5,8 @@
 // plugin directories automatically. Installing Coucou's opencode support is
 // therefore a single file copy:
 //
-//   <bundled coucou.js> → %USERPROFILE%\.config\opencode\plugins\coucou.js
+//   <bundled coucou.js> → ~/.config/opencode/plugins/coucou.js
+//                       (or $XDG_CONFIG_HOME/opencode/plugins/coucou.js)
 //
 // The same strict rules as hooks.rs apply: take a dated backup, show what
 // will change, and write only after an explicit click. Uninstall removes
@@ -19,6 +20,7 @@ use std::path::PathBuf;
 
 use serde::Serialize;
 
+use crate::platform;
 use crate::settings;
 
 /// File name inside opencode's plugin directories.
@@ -55,11 +57,10 @@ pub struct OpencodePreview {
     pub fingerprint: String,
 }
 
+/// Where opencode loads global plugins from: `$XDG_CONFIG_HOME/opencode/plugins`
+/// on Linux, `~/.config/opencode/plugins` on Windows.
 pub fn plugin_dir() -> PathBuf {
-    std::env::var_os("USERPROFILE")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".config")
+    platform::xdg_config_home()
         .join("opencode")
         .join("plugins")
 }
@@ -117,15 +118,13 @@ fn stamp() -> String {
     format!("{}", chrono_stamp())
 }
 
-/// Local timestamp without pulling in chrono: reuses the same shape as
-/// hooks.rs (`yyyyMMdd-HHmmss`) via the Win32 clock.
+/// Local timestamp, same shape as hooks.rs (`yyyyMMdd-HHmmss`), from the one
+/// clock each platform already gives us.
 fn chrono_stamp() -> String {
-    // hooks.rs already depends on windows::GetLocalTime; duplicate the tiny
-    // call here rather than reaching into that module.
-    let t = unsafe { windows::Win32::System::SystemInformation::GetLocalTime() };
+    let t = crate::platform::local_time();
     format!(
         "{:04}{:02}{:02}-{:02}{:02}{:02}",
-        t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond
+        t.year, t.month, t.day, t.hour, t.minute, t.second
     )
 }
 
@@ -319,6 +318,7 @@ mod tests {
     #[test]
     fn bundled_source_mentions_relay_and_agent() {
         assert!(BUNDLED.contains("coucou-hook.exe"));
+        assert!(BUNDLED.contains("coucou/bin/coucou-hook"));
         assert!(BUNDLED.contains("\"agent\": \"opencode\""));
         assert!(BUNDLED.contains("permission.asked"));
     }

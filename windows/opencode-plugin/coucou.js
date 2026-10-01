@@ -1,10 +1,11 @@
 // coucou.js — Coucou plugin for opencode.
 //
-// Forwards opencode session / tool / permission events to Coucou over the
-// named pipe `\\.\pipe\coucou-<sid>` via `coucou-hook.exe`, the same relay
-// Claude Code hooks use. Payloads reuse the Claude Code hook shape
-// (`hook_event_name`, `session_id`, `cwd`, `tool_name`, `tool_input`, …)
-// plus `"agent": "opencode"`, so the island routes them to the opencode pill.
+// Forwards opencode session / tool / permission events to Coucou over the same
+// relay Claude Code hooks use: the named pipe `\\.\pipe\coucou-<sid>` on
+// Windows, or the Unix socket `$XDG_RUNTIME_DIR/coucou.sock` on Linux/macOS.
+// Payloads reuse the Claude Code hook shape (`hook_event_name`, `session_id`,
+// `cwd`, `tool_name`, `tool_input`, …) plus `"agent": "opencode"`, so the island
+// routes them to the opencode pill.
 //
 // Hard rule (same as nb-hook / coucou-hook): **never block opencode.**
 //   * Fire-and-forget events get a 2 s relay budget and are abandoned after.
@@ -26,8 +27,18 @@ const COUCOU_PLUGIN_VERSION = 1;
 function relayCandidates() {
   const list = [];
   try {
-    const local = typeof process !== "undefined" ? process.env.LOCALAPPDATA : "";
-    if (local) list.push(`${local}\\Coucou\\bin\\coucou-hook.exe`);
+    const env = typeof process !== "undefined" ? process.env : {};
+
+    if (env.LOCALAPPDATA) {
+      list.push(`${env.LOCALAPPDATA}\\Coucou\\bin\\coucou-hook.exe`);
+    }
+
+    // Unix: the relay lives in the XDG data dir (or .local/share on Windows,
+    // which we never reach here) and talks over $XDG_RUNTIME_DIR/coucou.sock.
+    const home = env.HOME;
+    const data = env.XDG_DATA_HOME || (home ? `${home}/.local/share` : "");
+    const relay = data ? `${data}/coucou/bin/coucou-hook` : "";
+    if (relay) list.push(relay);
   } catch { /* process.env unavailable — fall through */ }
   return list;
 }

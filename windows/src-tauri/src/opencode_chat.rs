@@ -61,15 +61,40 @@ pub fn resolve_bin(configured: &str) -> Option<PathBuf> {
         }
         return None;
     }
-    if let Some(p) = crate::find_on_path("opencode") {
+    if let Some(p) = crate::platform::find_on_path("opencode") {
         return Some(p);
     }
-    if let Some(home) = std::env::var_os("USERPROFILE").map(PathBuf::from) {
-        for rel in [
-            ".bun/bin/opencode.exe",
-            "scoop/shims/opencode.exe",
-            ".opencode/bin/opencode.exe",
-        ] {
+    // Well-known spots for the installers people actually use. Windows first,
+    // then the Unix ones: an opencode installed with npm/pnpm/bun or the
+    // installer script ends up in one of these on Linux.
+    let mut homes: Vec<PathBuf> = Vec::new();
+    for var in ["APPDATA", "USERPROFILE", "HOME"] {
+        if let Some(dir) = std::env::var_os(var).map(PathBuf::from) {
+            if !homes.contains(&dir) {
+                homes.push(dir);
+            }
+        }
+    }
+    let mut rels: Vec<String> = vec![
+        ".bun/bin/opencode.exe".into(),
+        "scoop/shims/opencode.exe".into(),
+        ".opencode/bin/opencode.exe".into(),
+    ];
+    // Unix layouts: ~/.opencode/bin, ~/.local/bin, bun, pnpm, volta, nvm and
+    // npm global prefix all land in one of these.
+    for rel in [
+        ".opencode/bin/opencode",
+        ".local/bin/opencode",
+        ".bun/bin/opencode",
+        ".volta/bin/opencode",
+        ".local/share/pnpm/opencode",
+        ".nvm/current/bin/opencode",
+        ".npm-global/bin/opencode",
+    ] {
+        rels.push(rel.into());
+    }
+    for home in homes {
+        for rel in &rels {
             let p = home.join(rel);
             if p.is_file() {
                 return Some(p);
@@ -178,9 +203,7 @@ pub async fn send(
 
 /// Working dir + file attachments + context line for a fresh conversation.
 fn first_turn_context(context: &Option<ChatContext>) -> (String, Vec<String>, String) {
-    let home = std::env::var_os("USERPROFILE")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."));
+    let home = crate::platform::home_dir();
     match context {
         Some(ChatContext::File { name, path }) => {
             let dir = std::path::Path::new(path)
@@ -206,16 +229,13 @@ fn first_turn_context(context: &Option<ChatContext>) -> (String, Vec<String>, St
 /// the child on a full pipe buffer, then enforces the deadline.
 fn run_blocking(bin: &str, args: &[String]) -> Result<(bool, String, String), String> {
     use std::io::Read;
-    use std::os::windows::process::CommandExt;
 
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-
-    let mut child = std::process::Command::new(bin)
-        .args(args)
+    let mut cmd = std::process::Command::new(bin);
+    cmd.args(args)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .creation_flags(CREATE_NO_WINDOW)
+        .stderr(std::process::Stdio::piped());
+    let mut child = crate::platform::no_console(&mut cmd)
         .spawn()
         .map_err(|e| format!("could not start opencode: {e}"))?;
 
