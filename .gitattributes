@@ -1,2 +1,19 @@
 docs/** linguist-documentation
 design/** linguist-documentation
+
+# Coucou is built on Windows, macOS and Linux from one checkout, and this
+# repository is worked on from all three. A CRLF line ending in a shell script
+# or a .desktop file is not a cosmetic difference: `#!/usr/bin/env bash\r` is
+# "no such file or directory" on Linux, and desktop-file-validate rejects the
+# entry. Text stays LF everywhere; only files that are genuinely binary are
+# left to Git's own detection.
+* text=auto eol=lf
+
+*.png binary
+*.gif binary
+*.ico binary
+*.wav binary
+*.mp3 binary
+*.ttf binary
+*.xcassets binary
+

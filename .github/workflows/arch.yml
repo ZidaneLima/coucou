@@ -1,0 +1,92 @@
+name: Arch
+
+# Compiles and tests the Linux port on Arch, in an Arch container. Ubuntu
+# runners would catch most of it, but the package names, the pkg-config files
+# and the -dev headers are exactly the part that breaks on a real user's machine,
+# so the check runs on the distribution being targeted.
+#
+# Runs on every push and pull request. It does not publish anything: releases
+# are the job of linux.yml.
+
+on:
+  push:
+    branches: [arch-linux, main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  arch:
+    runs-on: ubuntu-latest
+    container: archlinux
+
+    defaults:
+      run:
+        working-directory: windows
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Two pacman calls on purpose: -Syu replaces the runtime the base image
+      # was built against, and mixing a new core library into an old package
+      # set is how a container ends up with a broken dynamic loader.
+      - name: Update the container
+        working-directory: .
+        run: |
+          pacman -Syu --noconfirm
+          pacman -Scc --noconfirm || true
+
+      - name: Install build dependencies
+        working-directory: .
+        run: |
+          pacman -S --noconfirm --needed \
+            base-devel cargo nodejs npm pkgconf patchelf \
+            webkit2gtk-4.1 gtk3 gtk-layer-shell libappindicator-gtk3 \
+            librsvg openssl dbus gst-plugins-good
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            /usr/local/cargo/registry
+            /usr/local/cargo/git
+            windows/target
+          key: arch-cargo-${{ hashFiles('windows/Cargo.lock') }}
+          restore-keys: arch-cargo-
+
+      - name: Install front-end dependencies
+        run: npm ci
+
+      # tauri.conf.json lists the relay as a bundle resource, so the app's build
+      # script fails outright when target/release/coucou-hook is missing.
+      - name: Build the relay
+        run: cargo build --release --manifest-path hook/Cargo.toml
+
+      # The one job this environment exists for: platform/linux.rs and
+      # hook/src/unix.rs are cfg'd out everywhere else, so nothing else compiles
+      # them.
+      - name: Test
+        run: cargo test --workspace
+
+      - name: Build the app
+        run: |
+          npm run build
+          npm run tauri -- build --no-bundle
+
+      - name: Check the packaging scripts
+        working-directory: .
+        run: |
+          pacman -S --noconfirm --needed shellcheck desktop-file-utils
+          bash -n packaging/arch/install.sh
+          # Not shellchecked: a PKGBUILD is full of makepkg variables that are
+          # only defined while makepkg runs it.
+          bash -n packaging/arch/PKGBUILD
+          shellcheck -S warning packaging/arch/install.sh
+          desktop-file-validate packaging/arch/coucou.desktop
+          desktop-file-validate packaging/arch/coucou-autostart.desktop
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Coucou-Linux-arch-debug
+          path: windows/target/release/coucou*
+          retention-days: 7
