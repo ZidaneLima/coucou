@@ -314,6 +314,13 @@ pub fn left_button_down() -> bool {
     false
 }
 
+/// No equivalent here: a Wayland popup is a surface of ours inside our own
+/// window, never a separate top-level window that a hit test could land on. So
+/// a press outside the painted island is always an outside click.
+pub fn press_is_our_popup(_win: &WebviewWindow, _cx: f64, _cy: f64) -> bool {
+    false
+}
+
 // ── Island window ─────────────────────────────────────────────────────────────
 
 /// The few gtk-layer-shell calls we need, straight from the C library.

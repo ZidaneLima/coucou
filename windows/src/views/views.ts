@@ -24,6 +24,12 @@ export interface ViewActions {
   toggleSound(): void;
   setVolume(v: number): void;
   setAutoClose(seconds: number): void;
+  /** Seconds from compact to fully reduced; 0 = never fully reduce. */
+  setAbsence(seconds: number): void;
+  /** Pins the island open (ignores outside clicks, Escape and auto-close). */
+  togglePin(): void;
+  /** Whether the reduced island wakes on hover or only on a click. */
+  toggleWakeOnHover(): void;
   openSettingsWindow(): void;
   blip(): void;
 }

@@ -29,6 +29,19 @@ pub struct Settings {
     /// Optional `provider/model` override for opencode chat; empty = its default.
     #[serde(default)]
     pub opencode_model: String,
+    /// Pinned by the user from the island header: the island then ignores
+    /// outside clicks, Escape and the auto-close timer until unpinned.
+    #[serde(default)]
+    pub pin_island: bool,
+    /// Wake the reduced island on hover. When false it waits to be clicked.
+    #[serde(default = "default_wake_on_hover")]
+    pub wake_on_hover: bool,
+    /// Horizontal resting place of the compact island, normalised 0..=1 across
+    /// the target display: 0 = flush left, 0.5 = centred, 1 = flush right.
+    /// Stored as a fraction so a drag can land anywhere while the presets still
+    /// snap to exact edges.
+    #[serde(default = "default_notch_position")]
+    pub notch_position: f64,
 }
 
 fn default_chat_provider() -> String {
@@ -37,6 +50,14 @@ fn default_chat_provider() -> String {
 
 fn default_model() -> String {
     crate::claude::DEFAULT_MODEL.to_string()
+}
+
+fn default_wake_on_hover() -> bool {
+    true
+}
+
+fn default_notch_position() -> f64 {
+    0.5
 }
 
 impl Default for Settings {
@@ -59,6 +80,9 @@ impl Default for Settings {
             chat_provider: default_chat_provider(),
             opencode_bin: String::new(),
             opencode_model: String::new(),
+            pin_island: false,
+            wake_on_hover: default_wake_on_hover(),
+            notch_position: default_notch_position(),
         }
     }
 }

@@ -101,6 +101,12 @@ export interface Settings {
   opencodeBin: string;
   /** provider/model override for opencode chat; empty = its default. */
   opencodeModel: string;
+  /** Pinned: ignores outside clicks, Escape and the auto-close timer. */
+  pinIsland: boolean;
+  /** Wake the reduced island on hover. When false it waits to be clicked. */
+  wakeOnHover: boolean;
+  /** Resting place of the compact island, 0 = left edge, 1 = right edge. */
+  notchPosition: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -118,6 +124,9 @@ export const DEFAULT_SETTINGS: Settings = {
   chatProvider: "claude",
   opencodeBin: "",
   opencodeModel: "",
+  pinIsland: false,
+  wakeOnHover: true,
+  notchPosition: 0.5,
 };
 
 type Listener = () => void;
@@ -130,6 +139,10 @@ class AppState {
   focusId: string | null = null;
 
   stateOverride: BotStateName | null = null;
+
+  /** Logical rect of the monitor the island lives on, from `boot`. Needed to turn a
+   *  pointer delta into a normalised position while dragging. */
+  screen: { x: number; y: number; width: number; height: number; scale: number } | null = null;
 
   /** Cursor in logical screen pixels, origin top-left (like AppState.mousePosition). */
   mouse = { x: 0, y: 0 };

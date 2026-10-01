@@ -15,8 +15,8 @@ use ::windows::Win32::System::SystemInformation::GetLocalTime;
 use ::windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 use ::windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON};
 use ::windows::Win32::UI::WindowsAndMessaging::{
-    EnumChildWindows, GetClassNameW, GetCursorPos, GetWindowLongPtrW, SetWindowLongPtrW,
-    GWL_EXSTYLE, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+    EnumChildWindows, GetAncestor, GetClassNameW, GetCursorPos, GetWindowLongPtrW, SetWindowLongPtrW,
+    WindowFromPoint, GA_ROOT, GA_ROOTOWNER, GWL_EXSTYLE, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
 };
 
 use super::LocalTime;
@@ -199,6 +199,24 @@ pub fn cursor_physical() -> Option<(f64, f64)> {
 /// drag might be in flight before it reaches the window.
 pub fn left_button_down() -> bool {
     unsafe { (GetAsyncKeyState(VK_LBUTTON.0 as i32) as u16 & 0x8000) != 0 }
+}
+
+/// True when the window under the pointer is one of ours without being the
+/// island: a native `<select>` popup, which Windows gives its own top-level
+/// window even though it extends the island visually.
+///
+/// Such a popup is owned by the island (GA_ROOTOWNER) but is not it (GA_ROOT),
+/// so a press inside it must not read as a click outside the island.
+pub fn press_is_our_popup(win: &WebviewWindow, cx: f64, cy: f64) -> bool {
+    let Some(hwnd) = hwnd_of(win) else { return false };
+    unsafe {
+        let hit = WindowFromPoint(POINT { x: cx as i32, y: cy as i32 });
+        if hit.0.is_null() {
+            return false;
+        }
+        GetAncestor(hit, GA_ROOT).0 != hwnd.0 as *mut _
+            && GetAncestor(hit, GA_ROOTOWNER).0 == hwnd.0 as *mut _
+    }
 }
 
 // ── Island window ─────────────────────────────────────────────────────────────
