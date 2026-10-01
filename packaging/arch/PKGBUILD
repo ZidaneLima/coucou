@@ -1,0 +1,92 @@
+# Maintainer: this fork's repository — see its README for the build recipe.
+#
+# Builds Coucou from a release tarball with the Tauri CLI, then installs the
+# release binary and the relay by hand instead of shipping a .deb or a
+# self-mounting AppImage: an Arch user wants files where files belong.
+#
+#   makepkg -si          # build and install
+#   makepkg -s           # build, then print the source PKGBUILD for the AUR
+#
+# The relay is not listed here on purpose. Coucou copies its own copy out of its
+# resource directory into ~/.local/share/coucou/bin on first launch, the same
+# way the .deb and the AppImage do.
+
+pkgname=coucou
+pkgver=0.1.1
+pkgrel=1
+pkgdesc="Mochi lives at the top of your screen: your Claude Code and opencode sessions, at a glance"
+arch=('x86_64' 'aarch64')
+url="https://github.com/Louis-CFM/coucou"
+license=('MIT')
+# The whole Tauri/Wayland stack the island needs: WebKitGTK for the view,
+# gtk-layer-shell for the panel itself, Secret Service for the API keys.
+depends=(
+  'webkit2gtk-4.1'
+  'gtk3'
+  'gtk-layer-shell'
+  'libappindicator-gtk3'
+  'librsvg'
+  'openssl'
+  'dbus'
+)
+# Building needs the -dev headers of the same libraries.
+makedepends=(
+  'base-devel'
+  'cargo'
+  'nodejs'
+  'npm'
+  'pkgconf'
+  'webkit2gtk-4.1'
+  'gtk3'
+  'gtk-layer-shell'
+  'libappindicator-gtk3'
+  'librsvg'
+  'openssl'
+  'dbus'
+  'wget'
+  'patchelf'
+)
+# Mochi's 28 sounds are WAV, which needs wavparse from -good, and WebKitGTK
+# needs a PipeWire or PulseAudio sink to play them at all.
+optdepends=(
+  'gst-plugins-good: play Mochi’s 28 sounds'
+  'pipewire: audio output'
+  'opencode: session events and chat from the opencode CLI'
+)
+options=('!lto' '!debug')
+source=("coucou-$pkgver.tar.gz")
+# Filled in by the release workflow with the checksum of the tarball it uploads.
+sha256sums=('SKIP')
+
+prepare() {
+  tar -xzf "$srcdir/coucou-$pkgver.tar.gz"
+  cd "coucou-$pkgver"
+}
+
+build() {
+  cd "$srcdir/coucou-$pkgver/windows"
+
+  # tauri.conf.json lists the relay as a bundle resource, so it has to exist in
+  # target/release before the app is packaged.
+  cargo build --release --manifest-path hook/Cargo.toml
+
+  npm ci
+  npm run build
+  npm run tauri -- build --no-bundle
+}
+
+package() {
+  cd "$srcdir/coucou-$pkgver"
+
+  install -Dm755 windows/target/release/coucou "$pkgdir/usr/bin/coucou"
+  # Next to the binary, where Coucou looks for it when it installs its own copy.
+  install -Dm755 windows/target/release/coucou-hook "$pkgdir/usr/lib/coucou/coucou-hook"
+  ln -s /usr/lib/coucou/coucou-hook "$pkgdir/usr/bin/coucou-hook"
+
+  install -Dm644 packaging/arch/coucou.desktop \
+    "$pkgdir/usr/share/applications/coucou.desktop"
+  install -Dm644 windows/src-tauri/icons/icon.png \
+    "$pkgdir/usr/share/icons/hicolor/256x256/apps/coucou.png"
+  install -Dm644 windows/src-tauri/icons/32x32.png \
+    "$pkgdir/usr/share/icons/hicolor/32x32/apps/coucou.png"
+}

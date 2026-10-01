@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Coucou
+GenericName=Notch companion
+Comment=Mochi lives at the top of your screen: your Claude Code and opencode sessions, at a glance
+Exec=coucou
+Icon=coucou
+Terminal=false
+Categories=Development;Utility;
+Keywords=claude;opencode;ai;agent;terminal;
+StartupNotify=false
+X-GNOME-Autostart-enabled=true

@@ -1,0 +1,22 @@
+# Autostart entry for a Wayland session: hidden, no window, no notification.
+# Kept separate from coucou.desktop so enabling "start at login" is one file
+# copied into ~/.config/autostart, and disabling it is the same file removed.
+#
+# No Exec flag: Coucou always starts collapsed into its invisible wake strip and
+# only draws when something asks for it, so a Wayland autostart that shows a
+# window would make the desktop flash on every login for nothing.
+#
+# Hidden=true keeps it out of the GNOME/Waybar application list, which is where
+# an "always running" helper does not belong.
+
+[Desktop Entry]
+Type=Application
+Name=Coucou
+Comment=Mochi lives at the top of your screen
+Exec=coucou
+Icon=coucou
+Terminal=false
+Categories=Development;Utility;
+Hidden=true
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
