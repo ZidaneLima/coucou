@@ -149,7 +149,10 @@ pub fn open_in_editor(path: Option<&str>) -> bool {
 
     for var in ["COUCOU_EDITOR", "VISUAL", "EDITOR"] {
         let Some(value) = std::env::var_os(var).filter(|v| !v.is_empty()) else { continue };
-        let mut parts = value.to_string_lossy().split_whitespace();
+        // Bound first: split_whitespace borrows the Cow, which would otherwise be
+        // dropped at the end of the next statement, with `parts` still alive.
+        let value = value.to_string_lossy();
+        let mut parts = value.split_whitespace();
         let Some(program) = parts.next() else { continue };
         let mut cmd = Command::new(program);
         cmd.args(parts);
