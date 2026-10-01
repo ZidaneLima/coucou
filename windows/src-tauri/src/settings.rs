@@ -23,7 +23,7 @@ pub struct Settings {
     /// Chat backend: "claude" (Anthropic API) or "opencode" (local CLI).
     #[serde(default = "default_chat_provider")]
     pub chat_provider: String,
-    /// Optional explicit path to opencode.exe; empty = auto-detect.
+    /// Optional explicit path to the opencode binary; empty = auto-detect.
     #[serde(default)]
     pub opencode_bin: String,
     /// Optional `provider/model` override for opencode chat; empty = its default.

@@ -44,6 +44,12 @@ pub struct BootInfo {
     /// False where the OS has no global cursor (Wayland): the page then reports
     /// the cursor from its own mouse events.
     cursor_poll: bool,
+    /// File name of the relay, and where the keys live. Both are named here
+    /// rather than written into the HTML: `coucou-hook.exe` and "Windows
+    /// Credential Manager" are both wrong on Linux, in a window whose job is
+    /// to tell the user where their keys actually are.
+    relay_name: &'static str,
+    secret_store: &'static str,
 }
 
 #[tauri::command]
@@ -58,6 +64,8 @@ fn boot(app: AppHandle, shared: State<Shared>) -> BootInfo {
         version: env!("CARGO_PKG_VERSION").to_string(),
         hook_path: settings::hook_exe_path().to_string_lossy().to_string(),
         cursor_poll: platform::cursor_poll(),
+        relay_name: platform::HOOK_EXE,
+        secret_store: platform::SECRET_STORE,
     }
 }
 

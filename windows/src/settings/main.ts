@@ -9,6 +9,10 @@ import { h, clear } from "../views/dom";
 
 let settings: Settings = { ...DEFAULT_SETTINGS };
 let version = "";
+// Filled from boot(), which is where the OS answers for itself. The defaults only
+// matter if boot() fails, and then there is no settings window to show.
+let relayName = "coucou-hook";
+let secretStore = "the system keychain";
 
 const root = document.getElementById("settings-root")!;
 
@@ -84,7 +88,7 @@ function claudeSection(status: HookStatus): HTMLElement {
     if (!status.hookReady) {
       body.append(h("div", {
         class: "notice warn",
-        text: "coucou-hook.exe is not in place yet. Restart Coucou; if it still fails, build it with `cargo build -p coucou-hook`.",
+        text: `${relayName} is not in place yet. Restart Coucou; if it still fails, build it with \`cargo build -p coucou-hook\`.`,
       }));
     }
 
@@ -206,7 +210,7 @@ function opencodeSection(status: OpencodeStatus): HTMLElement {
       ),
       h("div", { class: "row" },
         h("label", { text: "Relay" }),
-        h("span", { class: "path", text: status.relayReady ? "coucou-hook.exe ready" : "coucou-hook.exe missing" }),
+        h("span", { class: "path", text: `${relayName} ${status.relayReady ? "ready" : "missing"}` }),
         statusDot(status.relayReady),
       ),
     );
@@ -214,7 +218,7 @@ function opencodeSection(status: OpencodeStatus): HTMLElement {
     if (!status.relayReady) {
       body.append(h("div", {
         class: "notice warn",
-        text: "coucou-hook.exe is not in place yet. Restart Coucou; if it still fails, build it with `cargo build -p coucou-hook`.",
+        text: `${relayName} is not in place yet. Restart Coucou; if it still fails, build it with \`cargo build -p coucou-hook\`.`,
       }));
     }
 
@@ -349,7 +353,7 @@ function chatSection(): HTMLElement {
 
       const bin = h("input", {
         type: "text",
-        placeholder: "opencode.exe path (optional — auto-detected)",
+        placeholder: "path to the opencode binary (optional — auto-detected)",
         value: settings.opencodeBin,
         style: "flex:1 1 auto;min-width:0",
         autocomplete: "off",
@@ -409,7 +413,7 @@ const MODELS: [string, string][] = [
 
 function apiSection(hasKey: boolean): HTMLElement {
   const dot = statusDot(hasKey);
-  const state = h("span", { class: "hint", text: hasKey ? "Key saved in the Windows Credential Manager." : "No key yet — the chat needs one." });
+  const state = h("span", { class: "hint", text: hasKey ? `Key saved in the ${secretStore}.` : "No key yet — the chat needs one." });
 
   const field = h("input", {
     type: "password",
@@ -427,7 +431,7 @@ function apiSection(hasKey: boolean): HTMLElement {
     const present = (await Bridge.secretPresent("anthropic-api-key")) ?? false;
     dot.style.background = present ? "#22c55e" : "#f4505e";
     state.textContent = present
-      ? "Key saved in the Windows Credential Manager."
+      ? `Key saved in the ${secretStore}.`
       : "No key yet — the chat needs one.";
     field.placeholder = present ? "••••••••••••  (stored)" : "sk-ant-...";
     clearBtn.style.display = present ? "" : "none";
@@ -488,7 +492,7 @@ interface IntegrationDef {
   id: string;
   name: string;
   color: string;
-  /** Credential Manager keys, in the order they are shown. */
+  /** OS keychain keys, in the order they are shown. */
   fields: { key: string; label: string; placeholder: string; secret: boolean }[];
 }
 
@@ -520,7 +524,7 @@ function integrationsSection(present: Record<string, boolean>): HTMLElement {
 
   function updateNote() {
     const used = settings.activeIntegrations.length;
-    note.textContent = `Pick up to ${MAX_ACTIVE} pills to show next to Mochi — ${used}/${MAX_ACTIVE} in use. Keys are stored in the Windows Credential Manager, never on disk.`;
+    note.textContent = `Pick up to ${MAX_ACTIVE} pills to show next to Mochi — ${used}/${MAX_ACTIVE} in use. Keys are stored in the ${secretStore}, never on disk.`;
   }
 
   for (const def of INTEGRATIONS) {
@@ -652,6 +656,8 @@ async function main() {
   if (boot) {
     settings = { ...settings, ...boot.settings };
     version = boot.version;
+    if (boot.relayName) relayName = boot.relayName;
+    if (boot.secretStore) secretStore = boot.secretStore;
   }
   const status = (await Bridge.hooksStatus()) ?? {
     installed: false, settingsPath: "", hookPath: "", hookReady: false,

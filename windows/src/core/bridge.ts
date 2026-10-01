@@ -28,6 +28,10 @@ export interface BootInfo {
   hookPath: string;
   /** False where the OS has no global cursor (Wayland): see Island.followPageCursor. */
   cursorPoll: boolean;
+  /** File name of the relay: coucou-hook.exe, or coucou-hook without it. */
+  relayName: string;
+  /** How this OS names its keychain, for the settings window. */
+  secretStore: string;
 }
 
 export const Bridge = {

@@ -7,7 +7,7 @@ import { Sound } from "../core/sound";
 import { State } from "../core/state";
 import type { Island } from "./island";
 
-/** Which Credential Manager key backs each pill. */
+  /** Which keychain key backs each pill. */
 const KEY_FOR: Record<string, string> = {
   integration_stripe: "stripe-api-key",
   integration_github: "github-token",

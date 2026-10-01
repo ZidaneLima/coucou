@@ -97,7 +97,7 @@ export interface Settings {
   model: string;
   /** Chat backend: "claude" (Anthropic API) or "opencode" (local CLI). */
   chatProvider: string;
-  /** Explicit opencode.exe path; empty = auto-detect. */
+  /** Explicit opencode binary path; empty = auto-detect. */
   opencodeBin: string;
   /** provider/model override for opencode chat; empty = its default. */
   opencodeModel: string;

@@ -31,6 +31,11 @@ pub const HOOK_EXE: &str = "coucou-hook";
 /// Environment variable holding the home directory.
 pub const HOME_VAR: &str = "HOME";
 
+/// What the settings window calls the keychain. `keyring`'s sync-secret-service
+/// backend talks to whatever is behind the D-Bus interface, so this covers both
+/// GNOME Keyring and KWallet without claiming which one is running.
+pub const SECRET_STORE: &str = "Secret Service keyring";
+
 // ── Files ─────────────────────────────────────────────────────────────────────
 
 /// An XDG base directory (`$XDG_CONFIG_HOME` …), or its fallback under the home

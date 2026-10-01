@@ -28,6 +28,9 @@ pub const HOOK_EXE: &str = "coucou-hook.exe";
 /// Environment variable holding the home directory.
 pub const HOME_VAR: &str = "USERPROFILE";
 
+/// What the settings window calls the keychain, in the user's own words.
+pub const SECRET_STORE: &str = "Windows Credential Manager";
+
 /// Keeps spawned helpers from flashing a console window.
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
